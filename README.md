@@ -11,7 +11,7 @@ Site sunum ve canlı demoyu tek akışta taşır (13 bölüm, sunumdaki sırayla
 3. **Standardizasyon:** `ts_utc, source, site, variable, value, unit, quality_flag, state, confidence, raw_ref`.
 4. **Karar kuralı:** Otomatik uygula / Öner ve onaylat / Yalnızca işaretle.
 5. **Uzman onayı:** “Onayla” kararı tarayıcıdaki kütüphaneye yazılır, hat yeniden çalışır, benzer sinyal artık otomatik geçer.
-6. **Çıktı:** standart CSV + JSON kalite raporu, Pareto, 180 günlük tahmin, kayıp suyun enerji/CO₂e karşılığı, Gemini ile şema eşleme ve rapor yorumu.
+6. **Çıktı:** standart CSV + JSON kalite raporu, Pareto, 180 günlük tahmin, kayıp suyun enerji/CO₂e karşılığı, Burble asistanı: dört hazır soru (kolon eşleme, öncelik, bakım uyarıları, modele hazırlık). Demo modunda yanıtlar ağ çağrısı yapılmadan hattın gerçek sonuçlarından üretilir; canlı dil modeli (Gemini, `api/ask.js`) final sürümünde bağlanacak.
 
 ## Veri kaynakları
 | Dosya | Kaynak | Lisans |
@@ -29,6 +29,8 @@ npx vercel dev                   # /api/ask dahil, .env.local içinde GEMINI_API
 ```
 
 ## Canlıya alma (Vercel)
+Demo modu için API anahtarı gerekmez. Aşağıdaki 2. adım yalnızca canlı dil modeli bağlandığında gerekir.
+
 1. Repoyu GitHub'a gönder, vercel.com → **Add New Project** → repoyu seç. Framework: **Other**, build komutu yok.
 2. **Settings → Environment Variables:** `GEMINI_API_KEY` (Google AI Studio'dan). İsteğe bağlı `GEMINI_MODEL` (varsayılan `gemini-2.5-flash`).
 3. Deploy. Anahtar yalnızca sunucu fonksiyonunda (`api/ask.js`) kullanılır, tarayıcıya gitmez.

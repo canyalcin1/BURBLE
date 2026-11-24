@@ -213,11 +213,11 @@
         <li><span class="mono">02</span>Eksik veri analizi</li>
         <li><span class="mono">03</span>Semantik şema eşleme</li>
         <li><span class="mono">04</span>Güven skoru üretimi</li>
-        <li><span class="mono">05</span>Uydurma çıktıya karşı koruma</li>
+        <li><span class="mono">05</span>Şema dışı çıktının reddi</li>
       </ol>
       <div class="principles" data-rv>
-        <div><b>Şema dışına çıkamaz</b><p>Dil modeli yalnızca tanımlı şemadaki alanlara eşleme yapabilir; dışına çıkan cevap sunucuda reddedilir. Sayısal hesap istatistik ve kural katmanında kalır.</p></div>
-        <div><b>Birikimli bilgi havuzu</b><p>Uzmanın onayladığı her karar kaydedilir. Benzer sinyal geldiğinde yeniden eğitime gerek kalmadan daha isabetli öneri sunulur.</p></div>
+        <div><b>Şema dışına çıkamaz</b><p>Modelin önerisi yalnızca tanımlı şemadaki alanlardan biri olabilir; şema dışı öneri doğrulama katmanında reddedilir. Sayısal hesap istatistik ve kural katmanında kalır.</p></div>
+        <div><b>Birikimli bilgi havuzu</b><p>Uzmanın onayladığı her karar kaydedilir. Benzer sinyal geldiğinde onaylı örnek doğrudan kullanılır; bunun için modeli yeniden eğitmek gerekmez.</p></div>
       </div>
     </div>
     <div class="card aibox" data-rv>
@@ -226,10 +226,17 @@
         <li><span id="fRows">–</span> satır</li>
         <li>kural katmanı</li>
         <li><span id="fIss">–</span> bulgu</li>
-        <li><span id="fKb">–</span> KB özet → Gemini</li>
+        <li><span id="fKb">–</span> KB özet → dil modeli</li>
       </ol>
-      <div class="row"><button class="btn primary" id="askMap" type="button" disabled>Kolon eşlemesini sor</button><button class="btn ghost" id="askSum" type="button" disabled>Raporu yorumlat</button></div>
-      <pre class="log mono" id="aiOut">Hat çalıştıktan sonra aktif olur.</pre>
+      <p class="mono small-h" style="margin-top:18px">Burble asistanına sor</p>
+      <div class="qs" role="group" aria-label="Hazır sorular">
+        <button class="q" type="button" data-q="map" disabled>Bu kolonlar hangi değişkene eşlenmeli?</button>
+        <button class="q" type="button" data-q="priority" disabled>Önce neyi düzeltmeliyim?</button>
+        <button class="q" type="button" data-q="maint" disabled>Bakım ekibine hangi uyarılar gitmeli?</button>
+        <button class="q" type="button" data-q="ready" disabled>Bu veri modele girmeye hazır mı?</button>
+      </div>
+      <pre class="log mono" id="aiOut" aria-live="polite">Hat çalıştıktan sonra aktif olur.</pre>
+      <p class="note demo-note">Demo modu: yanıtlar bu sayfada az önce çalışan hattın sonuçlarından üretilir, ağ çağrısı yapılmaz. Canlı dil modeli bağlantısı final sürümünde açılacak.</p>
     </div>
   </div>
 </section>

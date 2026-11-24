@@ -96,7 +96,7 @@ function mapColumns(src, ing) {
       if (m.v && lib[libKey + ':v']) Object.assign(m, lib[libKey + ':v']);
       return m;
     }
-    if (lib[libKey + ':v']) return { col, i, ...lib[libKey + ':v'], tier: 'auto', conf: .9, ev: 'Uzman onaylı (Gemini önerisi)' };
+    if (lib[libKey + ':v']) return { col, i, ...lib[libKey + ':v'], tier: 'auto', conf: .9, ev: 'Uzman onaylı (model önerisi)' };
     const numeric = ing.rows.slice(0, 50).filter(r => /^-?[\d.,]+$/.test((r[i] || '').trim())).length > 25;
     return { col, i, role: numeric ? 'unmapped' : 'meta', unmapped: numeric };
   });
@@ -152,7 +152,7 @@ function process(src, ing) {
 
   // measures -> standard records
   for (const m of maps.filter(m => m.v || m.unmapped)) {
-    if (m.unmapped) { add({ type: 'Şemada karşılığı yok', signal: m.col, tier: 'flag', conf: .5, n: ing.rows.length, ev: 'Kütüphanede eşleşme yok; Gemini’ye sorulabilir', unmapped: true, samples: ing.rows.slice(0, 5).map(r => r[m.i]) }); continue; }
+    if (m.unmapped) { add({ type: 'Şemada karşılığı yok', signal: m.col, tier: 'flag', conf: .5, n: ing.rows.length, ev: 'Kütüphanede eşleşme yok; asistana eşleme önerisi sorulabilir', unmapped: true, samples: ing.rows.slice(0, 5).map(r => r[m.i]) }); continue; }
     if (m.tier !== 'auto') add({ type: m.v === 'water_level' ? 'Belirsiz kolon anlamı' : 'Birimsiz sinyal / şema eşleme', signal: m.col, tier: 'suggest', conf: m.conf, n: ing.rows.length, ev: `${m.col} → ${m.v} [${SCHEMA[m.v]}${m.factor !== 1 ? `, ×${m.factor.toExponential(0)}` : ''}]. ${m.ev}`, key: `map:${src.id}:${m.col}` });
     const recs = ing.rows.map((r, k) => {
       const p = num(r[m.i], ing);
@@ -277,8 +277,8 @@ async function run() {
   const g = state.records.filter(r => r.flag === 'good').length;
   log(`6 · Onaylı çıktı hazır: kayıtların %${fmt(100 * g / state.records.length, 1)}'i “iyi”, kalanı bayraklı. Ham veri değişmedi.`);
   renderIssues(); renderStd(); renderPareto(); renderLoss(); renderForecast(); renderLca();
-  renderHeroStats(); $('#askMap').disabled = false; $('#askSum').disabled = false;
-  $('#aiOut').textContent = 'Hazır. Gemini’ye sorabilirsin.';
+  renderHeroStats(); document.querySelectorAll('.q').forEach(b => { b.disabled = false; b.classList.remove('on'); });
+  $('#aiOut').textContent = 'Hazır. Yukarıdaki sorulardan birini seç.';
   drawScope();
 }
 
@@ -366,29 +366,82 @@ function renderLca() {
 }
 $('#ei').oninput = $('#ef').oninput = renderLca;
 
-/* ---------- Gemini ---------- */
-async function ask(task, payload) {
-  $('#aiOut').textContent = 'Gemini düşünüyor…';
-  try {
-    const r = await fetch('/api/ask', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ task, payload }) });
-    const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status);
-    return j;
-  } catch (e) { $('#aiOut').textContent = 'Gemini’ye ulaşılamadı: ' + e.message + '\n(Yerelde çalışıyorsan /api yoktur; Vercel’de GEMINI_API_KEY ortam değişkenini tanımla.)'; return null; }
+/* ---------- Burble asistanı (demo modu) ----------
+   Yanıtlar ağ çağrısı yapmadan, bu sayfada çalışan hattın gerçek sonuçlarından üretilir.
+   Final sürümde aynı soru/yanıt sözleşmesi api/ask.js üzerinden canlı dil modeline bağlanacak. */
+const TIER_TR = { auto: 'otomatik', suggest: 'öner', flag: 'işaretle' };
+const ACTIONS = {
+  'Birimsiz sinyal / şema eşleme': 'Önerilen eşlemeleri uzman onayına sun. Onaylanan eşleme kütüphaneye yazılır, aynı kolon bir daha sorulmaz.',
+  'Saat dilimi belirsiz': 'Kaynağın saat dilimini işletmeden teyit et. Teyide kadar UTC varsayımı bayrakla taşınır.',
+  'Donmuş sensör şüphesi': 'Sensörü bakım listesine ekle. Değerler silinmez, “şüpheli” bayrağıyla kalır.',
+  'Zaman damgası yok': 'Yayıncıdan tarih alanı iste. O zamana kadar dosya zaman serisi analizine alınmaz.',
+  'Tekrarlı zaman damgası': 'Tekrarlarda son kaydı tutma önerisini onayla.',
+  'Veri boşluğu (iletişim kesintisi)': 'Boşluklar “eksik” olarak işaretlendi, değer uydurulmadı. İletişim hattı kontrol edilmeli.',
+  'Güncel olmayan veri': 'Kaynağın güncel sürümünü iste. Tahminler son kayıt tarihinden başlar.',
+  'Kopya / yanlış etiketli kolon': 'Yayıncıya kolon tanımını sor. Netleşene kadar bu kolon analizde kullanılmaz.',
+  'Fiziksel tutarsızlık': 'Değeri tasarım sınırlarıyla karşılaştır; netleşene kadar şüpheli kalır.',
+  'Belirsiz sayı biçimi': 'Su dengesiyle doğrulanan okumayı onayla.',
+  'Su denge tablosu tutmuyor': 'Farkı yayıncıyla mutabık kıl. Denge dışı ilçeler kayıp analizinde ayrı gösterilir.',
+  'Birim kayması (≈×1000)': '÷1000 düzeltmesini onaya sun; ham değer korunur.',
+  'Hata kodu (−999) değer sanılmış': 'Otomatik olarak “eksik” bayrağına çevrildi, ek işlem gerekmez.',
+  'Aykırı değer (saatlik profil)': 'Saha gözlemiyle karşılaştır; doğrulanana kadar şüpheli kalır.',
+  'Zaman kayması / geri sıçrama': 'Cihaz saatini ve yaz saati ayarını kontrol et.',
+  'Belirsiz kolon anlamı': 'Kolonun ne ölçtüğünü yayıncıdan teyit et.',
+  'Şemada karşılığı yok': 'Kolonu şemaya eşle ya da kapsam dışı olarak işaretle.',
+};
+const MAINT = ['Donmuş sensör şüphesi', 'Aykırı değer (saatlik profil)', 'Birim kayması (≈×1000)', 'Zaman kayması / geri sıçrama', 'Veri boşluğu (iletişim kesintisi)', 'Fiziksel tutarsızlık', 'Hata kodu (−999) değer sanılmış'];
+const GUESS = [[/debi|flow|q_?in|q_?out/i, 'flow_rate'], [/bas[ıi]n[çc]|press/i, 'pressure'], [/seviye|level/i, 'tank_level'], [/s[ıi]cakl|temp/i, 'temperature'], [/^ph$/i, 'ph'], [/klor|chlor|cl2?/i, 'chlorine'], [/bulan|turb|ntu/i, 'turbidity'], [/iletken|cond/i, 'conductivity'], [/enerji|kwh|energy/i, 'energy']];
+
+const answers = {
+  map() {
+    const items = state.issues.filter(i => i.key?.startsWith('map:') || i.unmapped);
+    if (!items.length) return 'Onay bekleyen kolon eşlemesi yok. Tüm kolonlar kütüphanedeki onaylı eşlemelerle geçti.';
+    const out = items.slice(0, 10).map(i => {
+      if (i.unmapped) { const g = GUESS.find(([re]) => re.test(i.signal)); return g ? `${i.signal} → ${g[1]} [${SCHEMA[g[1]]}]  güven %55\n   kanıt: kolon adı “${g[1]}” ile örtüşüyor; birim dosyada yok, uzman teyidi gerekli` : `${i.signal} → UNMAPPED\n   kanıt: kolon adı ve örnek değerler şemadaki hiçbir alanla örtüşmüyor; uydurma eşleme yapılmadı`; }
+      const r = state.results.find(x => x.issues.includes(i)), m = r?.maps.find(x => x.col === i.signal);
+      return `${i.signal} → ${m?.v} [${SCHEMA[m?.v]}]  güven %${fmt(i.conf * 100)}\n   kanıt: ${(m?.ev || '').replace(/^Dosyada birim yok\. /, '')}`;
+    });
+    return `${items.length} kolon için eşleme önerisi (yalnızca şemadaki ${Object.keys(SCHEMA).length} alandan seçildi):\n\n${out.join('\n\n')}${items.length > 10 ? `\n\n… ve ${items.length - 10} kolon daha.` : ''}\n\nÖnerileri “Bulgular” tablosundaki Onayla düğmesiyle kütüphaneye yazabilirsin.`;
+  },
+  priority() {
+    const agg = {}; state.issues.filter(i => !i.info).forEach(i => agg[i.type] = (agg[i.type] || 0) + i.n);
+    const e = Object.entries(agg).sort((a, b) => b[1] - a[1]), tot = e.reduce((a, x) => a + x[1], 0); let c = 0;
+    const top = e.slice(0, 3).map(([t, n], k) => { c += n; return `${k + 1}. ${t}: ${fmt(n)} kayıt (kümülatif %${fmt(100 * c / tot, 1)})\n   aksiyon: ${ACTIONS[t] || 'Kanıtı incele ve karar ver.'}`; });
+    return `Pareto'ya göre ilk üç sorun, etkilenen ${fmt(tot)} kaydın %${fmt(100 * c / tot, 1)}'ini oluşturuyor:\n\n${top.join('\n\n')}\n\nGeri kalan ${e.length - 3} sorun tipi toplam kaydın %${fmt(100 - 100 * c / tot, 1)}'i; bunlar ikinci turda ele alınabilir.`;
+  },
+  maint() {
+    const m = state.issues.filter(i => MAINT.includes(i.type) && (i.srcId === 'battledim' || i.srcId.startsWith('upload')));
+    if (!m.length) return 'Bu çalıştırmada sensör veya iletişim kaynaklı bakım uyarısı yok.\nNot: gerçek veride sensör arızası bulgusu zayıf; “Sentetik arıza ekle” kutusunu açıp hattı yeniden çalıştırarak uyarıların nasıl oluştuğunu görebilirsin.';
+    return `Bakım ekibine gidecek ${m.length} uyarı:\n\n` + m.map(i => `• [${TIER_TR[i.tier]}] ${i.source} · ${i.signal}\n  ${i.type}, ${fmt(i.n)} kayıt. ${ACTIONS[i.type] || ''}`).join('\n\n') + ($('#inject').checked ? '\n\nNot: Stres testi açık; bu uyarıların bir kısmı sentetik olarak eklenen arızalardan geliyor.' : '');
+  },
+  ready() {
+    const lines = state.results.map(r => {
+      const src = r.series[0]?.src || SOURCES.find(s => r.issues[0]?.srcId === s.id); if (!src) return null;
+      const recs = r.series.flatMap(s => s.recs), good = recs.filter(x => x.flag === 'good').length;
+      const open = r.issues.filter(i => i.tier === 'suggest' && !(i.key && lib[i.key])).length, flags = r.issues.filter(i => i.tier === 'flag').length;
+      const noTime = r.issues.some(i => i.type === 'Zaman damgası yok');
+      const verdict = noTime ? 'hazır değil (zaman damgası yok)' : open ? `koşullu: ${open} öneri onay bekliyor` : flags ? `kullanılabilir, ${flags} işaret not edilmeli` : 'hazır';
+      return `• ${src.label}: kayıtların %${fmt(100 * good / Math.max(1, recs.length), 1)}'i “iyi” → ${verdict}`;
+    }).filter(Boolean);
+    return `Kaynak bazında modele hazırlık:\n\n${lines.join('\n')}\n\nKural: onay bekleyen öneri varken veri modele “onaylı” etiketiyle verilmez; işaretli kayıtlar bayraklarıyla birlikte geçer, model bunları dışlayabilir.`;
+  },
+};
+let typing;
+function say(q, text) {
+  clearInterval(typing);
+  const out = $('#aiOut'), head = `▸ ${q}\n\n`;
+  if (RM) { out.textContent = head + text; return; }
+  out.textContent = head + 'Burble asistanı bulguları okuyor…';
+  setTimeout(() => {
+    let k = 0; out.textContent = head;
+    typing = setInterval(() => { k = Math.min(text.length, k + 6); out.textContent = head + text.slice(0, k); out.scrollTop = out.scrollHeight; if (k >= text.length) clearInterval(typing); }, 16);
+  }, 650);
 }
-$('#askMap').onclick = async () => {
-  const cols = state.issues.filter(i => i.unmapped || (i.type.startsWith('Birimsiz') || i.type.startsWith('Belirsiz kolon'))).map(i => {
-    const r = state.results.find(x => x.issues.includes(i));
-    const m = r.maps.find(m => m.col === i.signal.split(' ')[0]);
-    return { column: m.col, source: i.source, siblings: r.ing.headers.slice(0, 12), samples: r.ing.rows.slice(0, 5).map(x => x[m.i]), current: m.v || null };
-  });
-  const j = await ask('map', { columns: cols, schema: SCHEMA }); if (!j) return;
-  $('#aiOut').textContent = (j.suggestions || []).map(s => `${s.column} → ${s.variable} [${s.unit}]  güven ${fmt(s.confidence * 100)}%\n   kanıt: ${s.evidence}`).join('\n\n') + (j.rejected?.length ? `\n\nŞema dışı olduğu için reddedilen: ${j.rejected.join(', ')}` : '');
-};
-$('#askSum').onclick = async () => {
-  const agg = {}; state.issues.forEach(i => agg[i.type] = (agg[i.type] || 0) + i.n);
-  const j = await ask('explain', { pareto: Object.entries(agg).sort((a, b) => b[1] - a[1]), issues: state.issues.slice(0, 25).map(({ recRef, samples, ...i }) => i) }); if (!j) return;
-  $('#aiOut').textContent = (j.summary || '') + '\n\n' + (j.actions || []).map((a, k) => `${k + 1}. [${a.tier}] ${a.action}\n   neden: ${a.reason}`).join('\n');
-};
+document.querySelector('.qs').addEventListener('click', e => {
+  const b = e.target.closest('.q'); if (!b || b.disabled) return;
+  document.querySelectorAll('.q').forEach(x => x.classList.toggle('on', x === b));
+  say(b.textContent, answers[b.dataset.q]());
+});
 
 /* ---------- Upload ---------- */
 $('#upload').onchange = async e => {

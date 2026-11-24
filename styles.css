@@ -375,3 +375,10 @@ kbd{font:500 11px var(--mono);border:1px solid var(--line-2);border-bottom-width
 }
 @media (prefers-reduced-motion:reduce){.link,.livechip::before{animation:none}}
 main{overflow-x:clip}
+.qs{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 12px}
+.q{font:500 13.5px var(--sans);text-align:left;min-height:40px;padding:8px 14px;border-radius:999px;border:1px solid var(--line-2);background:var(--surface);color:var(--ink);cursor:pointer;transition:background .2s,border-color .2s,color .2s,transform .2s var(--ease)}
+.q:hover:not(:disabled){border-color:var(--primary);color:var(--primary);transform:translateY(-1px)}
+.q.on{background:var(--ink);border-color:var(--ink);color:#fff}
+.q:disabled{opacity:.45;cursor:not-allowed}
+.aibox .log{min-height:220px;max-height:360px}
+.demo-note{font-size:12.5px;margin-top:10px}
