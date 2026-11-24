@@ -7,11 +7,11 @@ const HOUR = 3600e3, DAY = 24 * HOUR;
 
 /* ---------- Sources (raw files, unchanged from the portals) ---------- */
 const SOURCES = [
-  { id: 'battledim', label: 'BattLeDIM L-Town SCADA', org: 'Kıbrıs Üniv. KIOS, Zenodo', file: 'data/battledim_2019_01_scada_flows.csv', tz: null, site: 'L-Town', unitInfo: 'Dosyada yok, yalnızca README’de', timeInfo: 'Yerel, dilim belirtilmemiş, 5 dk' },
-  { id: 'iski', label: 'İSKİ baraj doluluk', org: 'İBB Açık Veri', file: 'data/ibb_baraj_doluluk_2005_2021.csv', tz: 3, site: 'İstanbul (genel)', freshDays: 30, unitInfo: 'Oran %, hacim birimsiz', timeInfo: 'Tarih, günlük' },
-  { id: 'izsu_dam', label: 'İZSU baraj doluluk', org: 'İzmir BB Açık Veri', file: 'data/izsu_baraj_doluluk.csv', tz: 3, freshDays: 30, unitInfo: 'Belirtilmemiş', timeInfo: 'ISO, yerel saat' },
-  { id: 'izsu_prod', label: 'İZSU günlük su üretimi', org: 'İzmir BB Açık Veri', file: 'data/izsu_gunluk_uretim.csv', tz: 3, unitInfo: 'Belirtilmemiş', timeInfo: 'Yok' },
-  { id: 'izsu_loss', label: 'İZSU su kayıpları 2019', org: 'İzmir BB Açık Veri', file: 'data/izsu_su_kayiplari_2019.csv', tz: 3, unitInfo: 'Belirtilmemiş', timeInfo: 'Yalnızca yıl' },
+  { id: 'battledim', label: 'BattLeDIM L-Town SCADA (simülasyon)', org: 'Kıbrıs Üniv. KIOS, Zenodo', note: 'ondalık virgül · birim yok · saat dilimi yok', hl: /\d+,\d+/g, file: 'data/battledim_2019_01_scada_flows.csv', tz: null, site: 'L-Town', unitInfo: 'Dosyada yok, yalnızca README’de', timeInfo: 'Yerel, dilim belirtilmemiş, 5 dk' },
+  { id: 'iski', label: 'İSKİ baraj doluluk', org: 'İBB Açık Veri', note: 'İngilizce kolon · hacim birimsiz · 2021’de durmuş', hl: /,(\d{3})$/gm, file: 'data/ibb_baraj_doluluk_2005_2021.csv', tz: 3, site: 'İstanbul (genel)', freshDays: 30, unitInfo: 'Oran %, hacim birimsiz', timeInfo: 'Tarih, günlük' },
+  { id: 'izsu_dam', label: 'İZSU baraj doluluk', org: 'İzmir BB Açık Veri', note: 'BOM · yükseklik = doluluk?', hl: /(\d+\.\d+);\1(?=;)/g, file: 'data/izsu_baraj_doluluk.csv', tz: 3, freshDays: 30, unitInfo: 'Belirtilmemiş', timeInfo: 'ISO, yerel saat' },
+  { id: 'izsu_prod', label: 'İZSU günlük su üretimi', org: 'İzmir BB Açık Veri', note: 'tarih kolonu yok · birim yok', hl: /URETIM_MIKTARI/g, file: 'data/izsu_gunluk_uretim.csv', tz: 3, unitInfo: 'Belirtilmemiş', timeInfo: 'Yok' },
+  { id: 'izsu_loss', label: 'İZSU su kayıpları 2019', org: 'İzmir BB Açık Veri', note: 'binlik mi ondalık mı?', pick: /KINIK/, hl: /\d{3},\d{3}(?=;)/g, file: 'data/izsu_su_kayiplari_2019.csv', tz: 3, unitInfo: 'Belirtilmemiş', timeInfo: 'Yalnızca yıl' },
 ];
 
 /* Allowed target schema. The LLM may only map into these (enforced server-side too). */
@@ -236,8 +236,9 @@ const log = (t) => { const el = $('#log'); el.textContent += '\n' + t; el.scroll
 
 async function loadAll() {
   await Promise.all(SOURCES.map(async s => { try { state.raw[s.id] = await (await fetch(s.file)).text(); } catch { state.raw[s.id] = ''; } }));
-  renderSources();
+  renderSources(); renderRaw();
   drawScope();
+  run();
 }
 function renderSources() {
   const tb = $('#srcTable tbody'); tb.innerHTML = '';
@@ -276,18 +277,20 @@ async function run() {
   const g = state.records.filter(r => r.flag === 'good').length;
   log(`6 · Onaylı çıktı hazır: kayıtların %${fmt(100 * g / state.records.length, 1)}'i “iyi”, kalanı bayraklı. Ham veri değişmedi.`);
   renderIssues(); renderStd(); renderPareto(); renderLoss(); renderForecast(); renderLca();
-  $('#tiers').hidden = false; $('#issuesWrap').hidden = false; $('#askMap').disabled = false; $('#askSum').disabled = false;
+  renderHeroStats(); $('#askMap').disabled = false; $('#askSum').disabled = false;
   $('#aiOut').textContent = 'Hazır. Gemini’ye sorabilirsin.';
   drawScope();
 }
 
 const TIER = { auto: 'Otomatik', suggest: 'Öner', flag: 'İşaretle' };
+let filter = 'all';
 function renderIssues() {
   const tb = $('#issues tbody'); tb.innerHTML = '';
   const order = { suggest: 0, flag: 1, auto: 2 };
   state.issues.sort((a, b) => order[a.tier] - order[b.tier] || b.n - a.n).forEach((i, k) => {
+    if (filter !== 'all' && i.tier !== filter) return;
     const approved = i.key && lib[i.key];
-    tb.insertAdjacentHTML('beforeend', `<tr><td><span class="tag ${i.tier}">${TIER[i.tier]}</span></td><td>${esc(i.source)}<br><code>${esc(i.signal)}</code></td><td>${i.type}</td><td>${fmt(i.n)}</td><td>${fmt(i.conf * 100)}%</td><td><small>${esc(i.ev)}</small></td><td>${i.key ? `<button class="approve" data-k="${k}" ${approved ? 'disabled' : ''}>${approved ? 'Onaylı' : 'Onayla'}</button>` : ''}</td></tr>`);
+    tb.insertAdjacentHTML('beforeend', `<tr><td><span class="tag ${i.tier}">${TIER[i.tier]}</span></td><td>${esc(i.source)}<br><code>${esc(i.signal)}</code></td><td>${i.type}</td><td class="num">${fmt(i.n)}</td><td class="num">${fmt(i.conf * 100)}%</td><td><small>${esc(i.ev)}</small></td><td>${i.key ? `<button class="approve" type="button" data-k="${k}" ${approved ? 'disabled' : ''}>${approved ? 'Onaylı' : 'Onayla'}</button>` : ''}</td></tr>`);
   });
 }
 $('#issues').addEventListener('click', e => {
@@ -297,8 +300,9 @@ $('#issues').addEventListener('click', e => {
 });
 function renderStd() {
   const tb = $('#std tbody'); tb.innerHTML = '';
-  const pick = [...state.records.filter(r => r.flag !== 'good').slice(0, 6), ...state.records.filter(r => r.flag === 'good').slice(0, 6)];
-  pick.forEach(r => tb.insertAdjacentHTML('beforeend', `<tr><td><code>${Number.isFinite(r.ts) ? new Date(r.ts).toISOString().slice(0, 16) + 'Z' : '–'}</code></td><td>${esc(r.source)}</td><td>${esc(r.site)}</td><td><code>${r.variable}</code></td><td>${r.value == null ? '–' : fmt(r.value, 2)}</td><td>${r.unit}</td><td><span class="tag ${r.flag === 'good' ? 'auto' : r.flag === 'suspect' ? 'flag' : 'suggest'}">${r.flag}${r.state ? ' · ' + r.state : ''}</span></td><td>${fmt(r.conf * 100)}%</td></tr>`));
+  const pick = [];
+  for (const res of state.results) { const rs = res.series.flatMap(x => x.recs); const bad = rs.find(r => r.flag !== 'good'); pick.push(...rs.filter(r => r.flag === 'good').slice(0, bad ? 2 : 3)); if (bad) pick.push(bad); }
+  pick.forEach(r => tb.insertAdjacentHTML('beforeend', `<tr><td>${Number.isFinite(r.ts) ? new Date(r.ts).toISOString().slice(0, 16).replace('T', ' ') : '<span class="tag flag">zaman yok</span>'}</td><td>${esc(r.site)}</td><td><code>${r.variable}</code></td><td class="num">${r.value == null ? '–' : fmt(r.value, r.value > 999 ? 0 : 2)}</td><td>${r.unit}</td><td><span class="tag ${r.flag === 'good' ? 'auto' : r.flag === 'suspect' ? 'flag' : 'suggest'}">${r.flag}</span></td></tr>`));
 }
 function download(name, text, type) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); }
 $('#dlCsv').onclick = () => download('burble_standart.csv', 'ts_utc,source,site,variable,value,unit,quality_flag,state,confidence,raw_ref\n' + state.records.map(r => [Number.isFinite(r.ts) ? new Date(r.ts).toISOString() : '', r.source, `"${r.site}"`, r.variable, r.value ?? '', r.unit, r.flag, r.state || '', r.conf, `"${r.raw}"`].join(',')).join('\n'), 'text/csv');
@@ -306,25 +310,25 @@ $('#dlRep').onclick = () => download('burble_kalite_raporu.json', JSON.stringify
 
 /* ---------- Charts ---------- */
 const charts = {};
-Chart.defaults.color = '#8FA8AE'; Chart.defaults.borderColor = '#1C3540'; Chart.defaults.font.family = "'IBM Plex Sans', system-ui";
+Chart.defaults.locale = 'tr-TR'; Chart.defaults.color = '#5B6B80'; Chart.defaults.borderColor = '#E5EBF2'; Chart.defaults.font.family = "'Fira Sans', system-ui";
 function chart(id, cfg) { charts[id]?.destroy(); charts[id] = new Chart(document.getElementById(id), cfg); }
 function paretoCfg(labels, vals, color, unit) {
   const tot = vals.reduce((a, b) => a + b, 0); let c = 0; const cum = vals.map(v => (c += v) / tot * 100);
   return { data: { labels, datasets: [
     { type: 'bar', data: vals, backgroundColor: color, yAxisID: 'y', label: unit },
-    { type: 'line', data: cum, borderColor: '#FFB000', backgroundColor: '#FFB000', pointRadius: 2, yAxisID: 'y1', label: 'Kümülatif %' }] },
+    { type: 'line', data: cum, borderColor: '#D97706', backgroundColor: '#D97706', pointRadius: 2, borderWidth: 2, yAxisID: 'y1', label: 'Kümülatif %' }] },
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { autoSkip: false, maxRotation: 60, font: { size: 10 } } }, y: { beginAtZero: true }, y1: { position: 'right', min: 0, max: 100, grid: { display: false }, ticks: { callback: v => v + '%' } } } } };
 }
 function renderPareto() {
   const agg = {}; state.issues.filter(i => !i.info).forEach(i => agg[i.type] = (agg[i.type] || 0) + i.n);
   const e = Object.entries(agg).sort((a, b) => b[1] - a[1]);
-  chart('cPareto', paretoCfg(e.map(x => x[0]), e.map(x => x[1]), '#4FB3BF', 'kayıt'));
+  chart('cPareto', paretoCfg(e.map(x => x[0]), e.map(x => x[1]), '#3B82F6', 'kayıt'));
 }
 function renderLoss() {
   const r = state.results.find(r => r.series[0]?.src.id === 'izsu_loss'); if (!r) return;
   const loss = r.series.find(s => s.m.v === 'water_loss'), inp = r.series.find(s => s.m.v === 'system_input_volume');
   const rows = loss.recs.map((x, k) => ({ site: x.site, v: x.value, pct: 100 * x.value / inp.recs[k].value })).sort((a, b) => b.v - a.v);
-  chart('cLoss', paretoCfg(rows.map(x => x.site), rows.map(x => x.v), '#2E7F8A', 'm³'));
+  chart('cLoss', paretoCfg(rows.map(x => x.site), rows.map(x => x.v), '#1E40AF', 'm³'));
   const tot = rows.reduce((a, x) => a + x.v, 0), worst = [...rows].sort((a, b) => b.pct - a.pct).slice(0, 3);
   $('#lossNote').textContent = `${rows[0].site} tek başına kaybın %${fmt(100 * rows[0].v / tot)}'ini oluşturuyor. Oransal olarak en kötü üç ilçe: ${worst.map(w => `${w.site} %${fmt(w.pct)}`).join(', ')} (kayıp / sisteme giren su). Hacim için Merkez, verimlilik için bu ilçeler öncelikli.`;
 }
@@ -345,10 +349,10 @@ function renderForecast() {
   const hist = 730, lab = []; for (let k = T - hist; k <= T + H; k++) lab.push(new Date((d0 + k) * DAY).toISOString().slice(0, 10));
   const pad = Array(hist).fill(null);
   chart('cFc', { type: 'line', data: { labels: lab, datasets: [
-    { label: 'Gözlem (temizlenmiş)', data: [...y.slice(T - hist), ...Array(H).fill(null)], borderColor: '#4FB3BF', pointRadius: 0, borderWidth: 1.5 },
-    { label: 'Tahmin', data: [...pad, y[T], ...fc], borderColor: '#FFB000', pointRadius: 0, borderDash: [5, 4], borderWidth: 1.5 },
+    { label: 'Gözlem (temizlenmiş)', data: [...y.slice(T - hist), ...Array(H).fill(null)], borderColor: '#1E40AF', pointRadius: 0, borderWidth: 1.5 },
+    { label: 'Tahmin', data: [...pad, y[T], ...fc], borderColor: '#D97706', pointRadius: 0, borderDash: [5, 4], borderWidth: 2 },
     { label: '%80 alt', data: [...pad, y[T], ...lo], borderColor: 'transparent', pointRadius: 0, fill: false },
-    { label: '%80 aralık', data: [...pad, y[T], ...hi], borderColor: 'transparent', backgroundColor: 'rgba(255,176,0,.15)', pointRadius: 0, fill: '-1' }] },
+    { label: '%80 aralık', data: [...pad, y[T], ...hi], borderColor: 'transparent', backgroundColor: 'rgba(217,119,6,.14)', pointRadius: 0, fill: '-1' }] },
     options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { labels: { filter: i => i.text !== '%80 alt' } } }, scales: { x: { ticks: { maxTicksLimit: 8 } }, y: { min: 0, max: 100, ticks: { callback: v => v + '%' } } } } });
   $('#fcNote').textContent = `Hattan geçen ${fmt(y.length)} günlük seride ${est} eksik gün doğrusal ara değerle “tahmini” bayrağıyla dolduruldu, tekrarlı günlerde son kayıt tutuldu. Son gözlem ${lab[hist]}: %${fmt(y[T], 1)}; 180 gün sonrası beklenen %${fmt(fc[H - 1], 1)} (aralık %${fmt(lo[H - 1], 0)}–${fmt(hi[H - 1], 0)}). Kaynak 2021’de güncellenmeyi bıraktığı için tahmin de o tarihten başlar; bu, hattın işaretlediği “güncel olmayan veri” bulgusunun pratik sonucudur.`;
 }
@@ -406,17 +410,46 @@ function drawScope() {
   const frame = () => {
     const w = cv.width = cv.clientWidth * devicePixelRatio, h = cv.height = cv.clientHeight * devicePixelRatio;
     ctx.clearRect(0, 0, w, h);
-    const N = 864, off = Math.floor(scopeT) % (vals.length - N), seg = vals.slice(off, off + N);
-    const mx = 210, y0 = h * .12, yh = h * .5;
-    ctx.lineWidth = 1.5 * devicePixelRatio; ctx.strokeStyle = 'rgba(79,179,191,.75)'; ctx.beginPath();
+    const N = 576, off = Math.floor(scopeT) % (vals.length - N), seg = vals.slice(off, off + N);
+    const mx = 210, y0 = h * .08, yh = h * .84;
+    ctx.lineWidth = 1.6 * devicePixelRatio; ctx.strokeStyle = '#3B82F6'; ctx.beginPath();
     seg.forEach((v, i) => { const x = i / (N - 1) * w, y = y0 + yh * (1 - Math.min(v, mx) / mx); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); ctx.stroke();
-    ctx.fillStyle = '#FFB000';
-    seg.forEach((v, i) => { if (flagged.has(off + i)) ctx.fillRect(i / (N - 1) * w - 1.5, y0 + yh * (1 - Math.min(v, mx) / mx) - 1.5, 3 * devicePixelRatio, 3 * devicePixelRatio); });
-    const g = ctx.createLinearGradient(0, 0, 0, h); g.addColorStop(.35, 'rgba(6,20,27,0)'); g.addColorStop(.85, 'rgba(6,20,27,1)'); ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#F59E0B';
+    seg.forEach((v, i) => { if (flagged.has(off + i)) { ctx.beginPath(); ctx.arc(i / (N - 1) * w, y0 + yh * (1 - Math.min(v, mx) / mx), 3 * devicePixelRatio, 0, 7); ctx.fill(); } });
     scopeT += .6; if (!reduce && !document.hidden) scopeRAF = requestAnimationFrame(frame);
   };
   frame();
 }
 document.addEventListener('visibilitychange', () => { if (!document.hidden) drawScope(); });
+function renderRaw() {
+  const box = $('#rawList'); box.innerHTML = '';
+  for (const s of SOURCES) {
+    const lines = (state.raw[s.id] || '').split(/\r?\n/).filter(Boolean);
+    const body = [lines[0], ...(s.pick ? [lines.find(l => s.pick.test(l))] : lines.slice(1, 3))].filter(Boolean)
+      .map(l => { l = l.replace(/^﻿/, '‹BOM›'); return l.length > 118 ? l.slice(0, 118) + '…' : l; })
+      .map(l => esc(l).replace(s.hl || /$^/, m => `<mark>${m}</mark>`)).join('\n');
+    box.insertAdjacentHTML('beforeend', `<div class="rawfile"><div class="fn"><span>${esc(s.file.split('/').pop())}</span><em>${esc(s.note || '')}</em></div><pre>${body}</pre></div>`);
+  }
+}
+function renderHeroStats() {
+  $('#hRec').textContent = fmt(state.records.length); $('#hIss').textContent = state.issues.length; $('#insState').textContent = 'hat tamamlandı';
+  const rows = state.results.reduce((a, r) => a + r.ing.rows.length, 0);
+  const agg = {}; state.issues.forEach(i => agg[i.type] = (agg[i.type] || 0) + i.n);
+  const kb = new Blob([JSON.stringify({ pareto: Object.entries(agg), issues: state.issues.slice(0, 25).map(({ recRef, samples, ...i }) => i) })]).size / 1024;
+  $('#fRows').textContent = fmt(rows); $('#fIss').textContent = state.issues.length; $('#fKb').textContent = fmt(kb, 1);
+}
+document.querySelector('.chips').addEventListener('click', e => {
+  const c = e.target.closest('.chip'); if (!c) return; filter = c.dataset.f;
+  document.querySelectorAll('.chip').forEach(x => { x.classList.toggle('on', x === c); x.setAttribute('aria-pressed', x === c); });
+  renderIssues();
+});
+addEventListener('scroll', () => $('#nav').classList.toggle('scrolled', scrollY > 8), { passive: true });
+const links = [...document.querySelectorAll('.nav nav a')];
+const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) links.forEach(a => a.classList.toggle('cur', a.getAttribute('href') === '#' + e.target.id)); }), { rootMargin: '-45% 0px -50% 0px' });
+['kaynaklar', 'hat', 'bulgular', 'analiz', 'ai'].forEach(id => io.observe(document.getElementById(id)));
+const rio = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); rio.unobserve(e.target); } }), { threshold: .12 });
+document.querySelectorAll('.sec-head, .compare, .pipe, .tiers, .bento > *, .ai > *').forEach(el => { el.classList.add('rv'); rio.observe(el); });
 $('#run').onclick = run;
+$('#runTop').onclick = () => { document.getElementById('hat').scrollIntoView(); run(); };
 loadAll();
+

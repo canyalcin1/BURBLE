@@ -4,114 +4,184 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>BURBLE · Su verisi için güvenilirlik katmanı</title>
-<meta name="description" content="BURBLE, dağınık su altyapısı verisini (SCADA, sayaç, baraj, kayıp-kaçak) tek bir standarda oturtur, kalite bayrağı ve güven skoru ekler, uzman onayıyla öğrenir.">
+<meta name="description" content="BURBLE, farklı kaynaklardan gelen su verisini tek bir şemaya oturtur, her değere kalite bayrağı ve güven skoru ekler, emin olmadığı hiçbir değeri sessizce değiştirmez.">
 <meta property="og:title" content="BURBLE · Su konuşur, Burble dinler">
-<meta property="og:description" content="Gerçek açık veriyle çalışan su verisi standardizasyon ve güvenilirlik demosu.">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><path d='M16 3C11 11 7 16 7 21a9 9 0 0 0 18 0c0-5-4-10-9-18z' fill='%234FB3BF'/></svg>">
+<meta property="og:description" content="Açık su verisiyle çalışan veri standardizasyon ve güvenilirlik demosu.">
+<meta name="theme-color" content="#F5F7FA">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230B1F3A'/><path d='M16 6c-4 6-7 9.5-7 13a7 7 0 0 0 14 0c0-3.5-3-7-7-13z' fill='%233B82F6'/></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Fira+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 <a class="skip" href="#main">İçeriğe geç</a>
-<header class="nav">
-  <a href="#top" class="logo" aria-label="BURBLE ana sayfa">BURBLE</a>
+
+<header class="nav" id="nav">
+  <a href="#top" class="brand" aria-label="BURBLE, sayfa başı">
+    <svg width="22" height="22" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="currentColor"/><path d="M16 6c-4 6-7 9.5-7 13a7 7 0 0 0 14 0c0-3.5-3-7-7-13z" fill="#3B82F6"/></svg>
+    BURBLE
+  </a>
   <nav aria-label="Bölümler">
-    <a href="#kaynaklar">Kaynaklar</a><a href="#hat">Hat</a><a href="#pareto">Pareto</a><a href="#tahmin">Tahmin</a><a href="#lca">LCA</a><a href="#ai">Gemini</a>
+    <a href="#kaynaklar">Veri</a><a href="#hat">Hat</a><a href="#bulgular">Bulgular</a><a href="#analiz">Analiz</a><a href="#ai">Yapay zekâ</a>
   </nav>
+  <button class="btn sm primary" id="runTop" type="button">Hattı çalıştır</button>
 </header>
 
 <main id="main">
-<section id="top" class="hero">
-  <canvas id="scope" aria-hidden="true"></canvas>
+
+<!-- HERO -->
+<section id="top" class="hero wrap">
   <div class="hero-copy">
-    <p class="mono kicker">L-Town SCADA · sensör p227 · Ocak 2019 · 5 dk</p>
-    <h1>Su konuşur,<br><span>Burble dinler.</span></h1>
-    <p class="lead">Farklı marka sayaç, pompa ve SCADA sistemlerinden gelen dağınık su verisini tek bir şemaya oturtan, her değere kalite bayrağı ve güven skoru ekleyen, emin olmadığı hiçbir değeri sessizce değiştirmeyen ara katman.</p>
+    <p class="meta"><span class="dot" aria-hidden="true"></span>Veri güvenilirlik ara katmanı · Concordia</p>
+    <h1>Su konuşur,<br><em>Burble</em> dinler.</h1>
+    <p class="lead">Sayaç, pompa, SCADA ve baraj verisi her markada başka bir dille yazılır. Burble bu dilleri tek bir şemaya çevirir, her değere kalite bayrağı ve güven skoru ekler, emin olmadığı hiçbir değeri sessizce değiştirmez.</p>
     <div class="row">
-      <a class="btn primary" href="#hat">Hattı gerçek veriyle çalıştır</a>
-      <a class="btn ghost" href="#kaynaklar">Hangi veri?</a>
+      <a class="btn primary" href="#kaynaklar">Ham veriyi gör
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+      <a class="btn ghost" href="#hat">Hat nasıl çalışır</a>
+    </div>
+  </div>
+
+  <figure class="instrument card" aria-label="Debi sinyali, şüpheli noktalar işaretli">
+    <header class="ins-head">
+      <span class="mono">p227 · debi · 5 dk</span>
+      <span class="live mono" id="insState">okunuyor</span>
+    </header>
+    <canvas id="scope" aria-hidden="true"></canvas>
+    <div class="legend mono"><span><i class="sw sig"></i>sinyal</span><span><i class="sw flg"></i>işaretli nokta</span></div>
+    <dl class="ins-stats">
+      <div><dt>Kaynak</dt><dd id="hSrc">5</dd></div>
+      <div><dt>Standart kayıt</dt><dd id="hRec">–</dd></div>
+      <div><dt>Bulgu</dt><dd id="hIss">–</dd></div>
+    </dl>
+  </figure>
+</section>
+
+<!-- RAW vs STANDARD : signature -->
+<section id="kaynaklar" class="wrap block">
+  <div class="sec-head">
+    <h2>Aynı su, beş farklı dil.</h2>
+    <p>Solda dosyalar portaldan indirildiği haliyle duruyor. Ayraç, ondalık işareti, birim, saat dilimi ve kolon adları her birinde farklı. Sağda aynı kayıtlar Burble şemasında.</p>
+  </div>
+
+  <div class="compare">
+    <div class="pane raw">
+      <div class="pane-head"><span class="mono">ham</span><span class="pill warn">5 biçim</span></div>
+      <div id="rawList" class="rawlist"></div>
+    </div>
+    <div class="arrow" aria-hidden="true">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+    </div>
+    <div class="pane std">
+      <div class="pane-head"><span class="mono">burble şeması</span><span class="pill ok">1 biçim</span></div>
+      <div class="tablewrap flat"><table id="std"><thead><tr><th>ts_utc</th><th>tesis</th><th>değişken</th><th class="num">değer</th><th>birim</th><th>bayrak</th></tr></thead><tbody></tbody></table></div>
+    </div>
+  </div>
+
+  <details class="srcmeta">
+    <summary>Kaynak künyesi ve lisanslar</summary>
+    <div class="tablewrap"><table id="srcTable"><thead><tr><th>Kaynak</th><th>Biçim</th><th class="num">Satır</th><th>Kolonlar</th><th>Birim bilgisi</th><th>Zaman</th></tr></thead><tbody></tbody></table></div>
+  </details>
+  <label class="upload"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 16V4M6 10l6-6 6 6M4 20h16"/></svg> Kendi CSV dosyanı hatta ekle<input type="file" id="upload" accept=".csv,.txt"></label>
+</section>
+
+<!-- PIPELINE -->
+<section id="hat" class="band">
+  <div class="wrap block">
+    <div class="sec-head">
+      <h2>Altı adım, her biri kayıt altında.</h2>
+      <p>Ham veri hiçbir zaman silinmez. Her dönüşüm kaynağı, gerekçesi ve onaylayan kişiyle birlikte saklanır.</p>
+    </div>
+    <div class="pipe">
+      <ol class="steps" id="steps">
+        <li><b>Veri alımı</b><span>Ayraç, ondalık ve BOM tespiti</span></li>
+        <li><b>Kalite analizi</b><span>Boşluk, donma, aykırı değer, fiziksel tutarlılık</span></li>
+        <li><b>Standardizasyon</b><span>Ortak şema, SI birim, UTC</span></li>
+        <li><b>Gerekçeli öneri</b><span>Kanıt ve güven skoru</span></li>
+        <li><b>Uzman doğrulaması</b><span>Onay kütüphaneye yazılır</span></li>
+        <li><b>Onaylı çıktı</b><span>Standart CSV ve kalite raporu</span></li>
+      </ol>
+      <div class="console card">
+        <div class="console-head">
+          <span class="mono">burble.log</span>
+          <label class="check"><input type="checkbox" id="inject"> Sentetik arıza ekle (demo)</label>
+          <button class="btn sm primary" id="run" type="button">Yeniden çalıştır</button>
+        </div>
+        <pre class="log mono" id="log" aria-live="polite">Hazırlanıyor…</pre>
+      </div>
+    </div>
+    <div class="tiers">
+      <article class="tier t-auto"><p class="n" id="tAuto">0</p><h3>Otomatik uygula</h3><p>Kesin, risksiz ve geri alınabilir.</p></article>
+      <article class="tier t-sug"><p class="n" id="tSug">0</p><h3>Öner ve onaylat</h3><p>Kanıt var, karar uzmanın.</p></article>
+      <article class="tier t-flag"><p class="n" id="tFlag">0</p><h3>Yalnızca işaretle</h3><p>Veriye dokunulmaz, şüphe görünür kalır.</p></article>
     </div>
   </div>
 </section>
 
-<section id="kaynaklar" class="band">
-  <h2>Beş dosya, beş ayrı dil</h2>
-  <p class="sub">Hepsi gerçek, herkese açık ve indirildiği haliyle duruyor. Ayraç, ondalık, birim, saat dilimi ve kolon adı her birinde farklı. Sorun tam olarak bu.</p>
-  <div class="tablewrap"><table id="srcTable"><thead><tr><th>Kaynak</th><th>Biçim</th><th>Satır</th><th>Kolon adları</th><th>Birim bilgisi</th><th>Zaman</th></tr></thead><tbody></tbody></table></div>
-  <label class="upload">Kendi CSV dosyanı ekle <input type="file" id="upload" accept=".csv,.txt"></label>
+<!-- FINDINGS -->
+<section id="bulgular" class="wrap block">
+  <div class="sec-head row-between">
+    <div><h2>Bulgular</h2><p>Öneri satırlarını onaylarsan karar kütüphaneye yazılır, hat yeniden çalışır ve aynı tip sinyal bir dahaki sefere otomatik geçer.</p></div>
+    <div class="chips" role="group" aria-label="Karar türüne göre süz">
+      <button class="chip on" data-f="all" aria-pressed="true">Tümü</button>
+      <button class="chip" data-f="suggest" aria-pressed="false">Öner</button>
+      <button class="chip" data-f="flag" aria-pressed="false">İşaretle</button>
+      <button class="chip" data-f="auto" aria-pressed="false">Otomatik</button>
+    </div>
+  </div>
+  <div class="tablewrap tall"><table id="issues"><thead><tr><th>Karar</th><th>Kaynak · sinyal</th><th>Bulgu</th><th class="num">Etkilenen</th><th class="num">Güven</th><th>Kanıt</th><th><span class="sr">İşlem</span></th></tr></thead><tbody></tbody></table></div>
+  <div class="row"><button class="btn ghost" id="dlCsv" type="button">Standart CSV indir</button><button class="btn ghost" id="dlRep" type="button">Kalite raporu (JSON)</button></div>
 </section>
 
-<section id="hat" class="band alt">
-  <h2>Altı adımlı izlenebilir hat</h2>
-  <p class="sub">Ham veri hiçbir zaman silinmez. Her dönüşüm, kaynağı ve gerekçesiyle kayda geçer.</p>
-  <ol class="steps" id="steps">
-    <li data-s="1"><b>Veri alımı</b><span>ayraç, ondalık, BOM tespiti</span></li>
-    <li data-s="2"><b>Kalite analizi</b><span>boşluk, donma, aykırı, fiziksel tutarlılık</span></li>
-    <li data-s="3"><b>Standardizasyon</b><span>ortak şema, SI birim, UTC</span></li>
-    <li data-s="4"><b>Gerekçeli öneri</b><span>kanıt + güven skoru</span></li>
-    <li data-s="5"><b>Uzman doğrulaması</b><span>onayla, kütüphaneye yaz</span></li>
-    <li data-s="6"><b>Onaylı çıktı</b><span>standart CSV + rapor</span></li>
-  </ol>
-  <div class="row">
-    <button class="btn primary" id="run">Hattı çalıştır</button>
-    <label class="check"><input type="checkbox" id="inject"> Stres testi: S1/S2/S4 tipi sentetik arıza enjekte et</label>
-  </div>
-  <pre class="log mono" id="log" aria-live="polite">Hazır. "Hattı çalıştır" ile başla.</pre>
-
-  <div class="tiers" id="tiers" hidden>
-    <article><h3>Otomatik uygula</h3><p class="n" id="tAuto">0</p><p>Kesin, risksiz, geri alınabilir.</p></article>
-    <article><h3>Öner ve onaylat</h3><p class="n" id="tSug">0</p><p>Kanıt var, karar uzmanın.</p></article>
-    <article><h3>Yalnızca işaretle</h3><p class="n" id="tFlag">0</p><p>Veriye dokunulmaz, şüphe görünür.</p></article>
-  </div>
-
-  <div id="issuesWrap" hidden>
-    <h3 class="h3">Bulgular</h3>
-    <div class="tablewrap"><table id="issues"><thead><tr><th>Karar</th><th>Kaynak / sinyal</th><th>Bulgu</th><th>Etkilenen</th><th>Güven</th><th>Kanıt</th><th></th></tr></thead><tbody></tbody></table></div>
-    <h3 class="h3">Standart veri (ilk 12 kayıt)</h3>
-    <div class="tablewrap"><table id="std"><thead><tr><th>ts_utc</th><th>kaynak</th><th>tesis</th><th>değişken</th><th>değer</th><th>birim</th><th>bayrak</th><th>güven</th></tr></thead><tbody></tbody></table></div>
-    <div class="row"><button class="btn ghost" id="dlCsv">Standart CSV indir</button><button class="btn ghost" id="dlRep">Kalite raporu (JSON)</button></div>
+<!-- ANALYSIS BENTO -->
+<section id="analiz" class="band">
+  <div class="wrap block">
+    <div class="sec-head"><h2>Temiz veriyle ne yapılır?</h2><p>Hattan geçen veri doğrudan karar araçlarına girer: öncelik sıralaması, ileri tahmin ve çevresel etki.</p></div>
+    <div class="bento">
+      <figure class="card b6"><figcaption><b>Önce neyi düzeltmeli?</b><span>Veri kalitesi sorunları, Pareto</span></figcaption><div class="cb"><canvas id="cPareto" role="img" aria-label="Veri kalitesi sorunlarının Pareto grafiği"></canvas></div></figure>
+      <figure class="card b6"><figcaption><b>Su nerede kayboluyor?</b><span>İZSU 2019, ilçe bazında kayıp (m³)</span></figcaption><div class="cb"><canvas id="cLoss" role="img" aria-label="İlçe bazında su kaybı Pareto grafiği"></canvas></div><p class="note" id="lossNote"></p></figure>
+      <figure class="card b8" id="tahmin"><figcaption><b>Baraj doluluğu, 180 gün</b><span>İSKİ 2005–2021 · mevsimsel analog tahmin, %80 aralık</span></figcaption><div class="cb"><canvas id="cFc" role="img" aria-label="Baraj doluluk tahmini"></canvas></div><p class="note" id="fcNote"></p></figure>
+      <div class="card b4 lca" id="lca">
+        <figcaption><b>Kaybolan suyun karbon izi</b><span>İşletme fazı enerjisi · İzmir 2019</span></figcaption>
+        <div class="kpi big"><span id="kCo2">–</span><small>t CO₂e / yıl</small></div>
+        <div class="kpi"><span id="kLoss">–</span><small>fiziki kayıp, m³ / yıl</small></div>
+        <div class="kpi"><span id="kMwh">–</span><small>boşa giden enerji, MWh / yıl</small></div>
+        <label>Enerji yoğunluğu, kWh/m³<input type="number" id="ei" value="0.50" step="0.05" min="0"></label>
+        <label>Emisyon faktörü, kg CO₂e/kWh<input type="number" id="ef" value="0.44" step="0.01" min="0"></label>
+        <p class="note">İki değer de varsayım. Resmi kaynakla değiştirilmeli.</p>
+      </div>
+    </div>
   </div>
 </section>
 
-<section id="pareto" class="band">
-  <h2>Önce neyi düzeltmeli?</h2>
-  <p class="sub">Pareto: sorunların küçük bir kısmı etkilenen kayıtların büyük kısmını oluşturur. Sağdaki grafik İzmir 2019 su kayıplarını ilçe bazında aynı mantıkla sıralar.</p>
-  <div class="grid2">
-    <figure><figcaption>Veri kalitesi sorunları · etkilenen kayıt</figcaption><div class="cb"><canvas id="cPareto" role="img" aria-label="Grafik"></canvas></div></figure>
-    <figure><figcaption>İZSU 2019 · ilçe bazında toplam su kaybı (m³)</figcaption><div class="cb"><canvas id="cLoss" role="img" aria-label="Grafik"></canvas></div></figure>
+<!-- AI -->
+<section id="ai" class="wrap block">
+  <div class="ai">
+    <div>
+      <h2>Yapay zekâya satır değil, kanıt gider.</h2>
+      <p class="lead sm">Binlerce satırı dil modeline vermek hem pahalı hem güvensiz. Burble'da sayısal işi kural ve istatistik katmanı yapar; Gemini yalnızca birkaç kilobaytlık özeti görür.</p>
+      <ol class="flow mono">
+        <li><span id="fRows">–</span> satır</li>
+        <li>kural katmanı</li>
+        <li><span id="fIss">–</span> bulgu</li>
+        <li><span id="fKb">–</span> KB özet → Gemini</li>
+      </ol>
+      <p class="note">Model yalnızca tanımlı şemadaki alanlara eşleme yapabilir. Şema dışı bir cevap sunucuda reddedilir.</p>
+    </div>
+    <div class="card aibox">
+      <div class="row"><button class="btn primary" id="askMap" type="button" disabled>Kolon eşlemesini sor</button><button class="btn ghost" id="askSum" type="button" disabled>Raporu yorumlat</button></div>
+      <pre class="log mono" id="aiOut">Hat çalıştıktan sonra aktif olur.</pre>
+    </div>
   </div>
-  <p class="note" id="lossNote"></p>
-</section>
-
-<section id="tahmin" class="band alt">
-  <h2>Temiz veriyle ileri tahmin</h2>
-  <p class="sub">İstanbul baraj doluluğu (İSKİ, 2005–2021). Tekrarlı ve eksik günler hattan geçtikten sonra 180 günlük mevsimsel analog tahmin, %80 aralıkla.</p>
-  <figure><div class="cb"><canvas id="cFc" role="img" aria-label="Grafik"></canvas></div></figure>
-  <p class="note" id="fcNote"></p>
-</section>
-
-<section id="lca" class="band">
-  <h2>Kaybolan suyun karbon izi</h2>
-  <p class="sub">Yaşam döngüsü bakışı: şebekede kaybolan her m³ su, arıtılmış ve pompalanmış bir enerjiyi de beraberinde götürür. Kapsam yalnızca işletme fazı enerjisi; varsayımları değiştirebilirsin.</p>
-  <div class="lca">
-    <label>Arıtma + iletim enerji yoğunluğu (kWh/m³)<input type="number" id="ei" value="0.50" step="0.05" min="0"></label>
-    <label>Şebeke emisyon faktörü (kg CO₂e/kWh)<input type="number" id="ef" value="0.44" step="0.01" min="0"></label>
-    <div class="kpis"><div><span id="kLoss">–</span><small>fiziki kayıp, m³/yıl</small></div><div><span id="kMwh">–</span><small>boşa giden enerji, MWh/yıl</small></div><div><span id="kCo2">–</span><small>t CO₂e/yıl</small></div></div>
-  </div>
-</section>
-
-<section id="ai" class="band alt">
-  <h2>Gemini ile gerekçeli öneri</h2>
-  <p class="sub">Dil modeli yalnızca tanımlı şemadaki alanlara eşleme yapabilir; dışına çıkan cevap sunucuda reddedilir. Sayısal hesap kural katmanında kalır.</p>
-  <div class="row"><button class="btn primary" id="askMap" disabled>Eşleşmeyen kolonları Gemini'ye sor</button><button class="btn ghost" id="askSum" disabled>Raporu yorumlat</button></div>
-  <pre class="log mono" id="aiOut">Önce hattı çalıştır.</pre>
 </section>
 </main>
 
-<footer class="band foot">
-  <p><b>BURBLE</b> · Concordia · Ali Talha Gezgin, Arda Özgür, Mert Giray Yalçın, Süleyman Yiğit Demircan</p>
-  <p class="mono small">Veri: <a href="https://acikveri.bizizmir.com">İzmir BB Açık Veri (İZSU)</a> · <a href="https://data.ibb.gov.tr">İBB Açık Veri (İSKİ)</a> · <a href="https://doi.org/10.5281/zenodo.4017659">BattLeDIM L-Town, Vrachimis vd. 2020, CC BY 4.0</a>. Stres testi açıkken eklenen arızalar sentetiktir ve öyle etiketlenir.</p>
+<footer class="foot">
+  <div class="wrap">
+    <p><b>BURBLE</b> · Concordia · Ali Talha Gezgin, Arda Özgür, Mert Giray Yalçın, Süleyman Yiğit Demircan</p>
+    <p class="small">Veri: <a href="https://acikveri.bizizmir.com">İzmir BB Açık Veri (İZSU)</a> · <a href="https://data.ibb.gov.tr">İBB Açık Veri (İSKİ)</a> · <a href="https://doi.org/10.5281/zenodo.4017659">BattLeDIM L-Town, Vrachimis vd. 2020, CC BY 4.0</a>. L-Town simüle edilmiş bir şebekedir. “Sentetik arıza ekle” açıkken eklenen arızalar demo amaçlıdır.</p>
+  </div>
 </footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
