@@ -2,6 +2,9 @@
 
 Dağınık su altyapısı verisini (SCADA, baraj, üretim, kayıp-kaçak) tek bir şemaya oturtan, her değere kalite bayrağı ve güven skoru ekleyen, uzman onayıyla öğrenen veri güvenilirlik katmanının ön eleme demosu.
 
+## Sunum modu
+Site sunum ve canlı demoyu tek akışta taşır (13 bölüm, sunumdaki sırayla). Sunarken `→` / `PgDn` (ya da sunum kumandası) sonraki bölüme, `←` / `PgUp` öncekine geçer; uzun bölümler önce kendi içinde kaydırılır. Sağ alttaki kontrol aynı işi fareyle yapar. "Nasıl çalışır" bölümüne gelindiğinde hat gerçek veri üzerinde baştan çalışır.
+
 ## Ne yapıyor
 1. **Veri alımı:** ayraç, ondalık biçimi ve BOM'u otomatik algılar. Ham dosyalar `data/` içinde, indirildiği haliyle durur.
 2. **Kalite analizi:** boşluk, tekrarlı/geri giden zaman damgası, donmuş sensör, pompa kapalı ayrımı, −999 hata kodu, birim kayması, saatlik profile göre aykırı değer, fiziksel tutarlılık, IWA su dengesi, güncel olmayan kaynak.

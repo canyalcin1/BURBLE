@@ -455,13 +455,5 @@ document.querySelector('.chips').addEventListener('click', e => {
   document.querySelectorAll('.chip').forEach(x => { x.classList.toggle('on', x === c); x.setAttribute('aria-pressed', x === c); });
   renderIssues();
 });
-addEventListener('scroll', () => $('#nav').classList.toggle('scrolled', scrollY > 8), { passive: true });
-const links = [...document.querySelectorAll('.nav nav a')];
-const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) links.forEach(a => a.classList.toggle('cur', a.getAttribute('href') === '#' + e.target.id)); }), { rootMargin: '-45% 0px -50% 0px' });
-['kaynaklar', 'hat', 'bulgular', 'analiz', 'ai'].forEach(id => io.observe(document.getElementById(id)));
-const rio = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); rio.unobserve(e.target); } }), { threshold: .12 });
-document.querySelectorAll('.sec-head, .compare, .pipe, .tiers, .bento > *, .ai > *').forEach(el => { el.classList.add('rv'); rio.observe(el); });
 $('#run').onclick = run;
-$('#runTop').onclick = () => { document.getElementById('hat').scrollIntoView(); run(); };
 loadAll();
-
