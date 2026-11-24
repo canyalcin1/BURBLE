@@ -269,7 +269,7 @@ async function run() {
   log(`3 · ${fmt(state.records.length)} kayıt ortak şemaya yazıldı (ts_utc, kaynak, tesis, değişken, değer, SI birim, bayrak, güven)`);
   await on(4);
   const cnt = t => state.issues.filter(i => i.tier === t).length;
-  $('#tAuto').textContent = cnt('auto'); $('#tSug').textContent = cnt('suggest'); $('#tFlag').textContent = cnt('flag');
+  countUp($('#tAuto'), cnt('auto')); countUp($('#tSug'), cnt('suggest')); countUp($('#tFlag'), cnt('flag'));
   log(`4 · Karar kuralı: ${cnt('auto')} otomatik, ${cnt('suggest')} öneri (onay bekliyor), ${cnt('flag')} yalnızca işaret`);
   await on(5);
   log(`5 · Uzman kütüphanesinde ${Object.keys(lib).length} onaylı karar var`);
@@ -292,6 +292,7 @@ function renderIssues() {
     const approved = i.key && lib[i.key];
     tb.insertAdjacentHTML('beforeend', `<tr><td><span class="tag ${i.tier}">${TIER[i.tier]}</span></td><td>${esc(i.source)}<br><code>${esc(i.signal)}</code></td><td>${i.type}</td><td class="num">${fmt(i.n)}</td><td class="num">${fmt(i.conf * 100)}%</td><td><small>${esc(i.ev)}</small></td><td>${i.key ? `<button class="approve" type="button" data-k="${k}" ${approved ? 'disabled' : ''}>${approved ? 'Onaylı' : 'Onayla'}</button>` : ''}</td></tr>`);
   });
+  stagger(tb);
 }
 $('#issues').addEventListener('click', e => {
   const b = e.target.closest('.approve'); if (!b) return;
@@ -302,7 +303,8 @@ function renderStd() {
   const tb = $('#std tbody'); tb.innerHTML = '';
   const pick = [];
   for (const res of state.results) { const rs = res.series.flatMap(x => x.recs); const bad = rs.find(r => r.flag !== 'good'); pick.push(...rs.filter(r => r.flag === 'good').slice(0, bad ? 2 : 3)); if (bad) pick.push(bad); }
-  pick.forEach(r => tb.insertAdjacentHTML('beforeend', `<tr><td>${Number.isFinite(r.ts) ? new Date(r.ts).toISOString().slice(0, 16).replace('T', ' ') : '<span class="tag flag">zaman yok</span>'}</td><td>${esc(r.site)}</td><td><code>${r.variable}</code></td><td class="num">${r.value == null ? '–' : fmt(r.value, r.value > 999 ? 0 : 2)}</td><td>${r.unit}</td><td><span class="tag ${r.flag === 'good' ? 'auto' : r.flag === 'suspect' ? 'flag' : 'suggest'}">${r.flag}</span></td></tr>`));
+  pick.forEach(r => tb.insertAdjacentHTML('beforeend', `<tr><td>${Number.isFinite(r.ts) ? new Date(r.ts).toISOString().slice(0, 16).replace('T', ' ') : '<span class="tag flag">zaman yok</span>'}</td><td>${esc(r.site)}</td><td><code>${r.variable}</code></td><td class="num">${r.value == null ? '–' : fmt(r.value, r.value > 999 ? 0 : 2)} <small class="u">${r.unit}</small></td><td><span class="tag ${r.flag === 'good' ? 'auto' : r.flag === 'suspect' ? 'flag' : 'suggest'}">${r.flag}</span></td></tr>`));
+  stagger(tb);
 }
 function download(name, text, type) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); }
 $('#dlCsv').onclick = () => download('burble_standart.csv', 'ts_utc,source,site,variable,value,unit,quality_flag,state,confidence,raw_ref\n' + state.records.map(r => [Number.isFinite(r.ts) ? new Date(r.ts).toISOString() : '', r.source, `"${r.site}"`, r.variable, r.value ?? '', r.unit, r.flag, r.state || '', r.conf, `"${r.raw}"`].join(',')).join('\n'), 'text/csv');
@@ -360,7 +362,7 @@ function renderForecast() {
 function renderLca() {
   const s = state.results.find(r => r.series[0]?.src.id === 'izsu_loss')?.series.find(x => x.m.v === 'physical_loss'); if (!s) return;
   const loss = s.recs.reduce((a, r) => a + (r.value || 0), 0), ei = +$('#ei').value, ef = +$('#ef').value;
-  $('#kLoss').textContent = fmt(loss / 1e6, 1) + ' M'; $('#kMwh').textContent = fmt(loss * ei / 1000); $('#kCo2').textContent = fmt(loss * ei * ef / 1000);
+  countUp($('#kLoss'), loss / 1e6, 1, ' M'); countUp($('#kMwh'), loss * ei / 1000); countUp($('#kCo2'), loss * ei * ef / 1000);
 }
 $('#ei').oninput = $('#ef').oninput = renderLca;
 
@@ -427,12 +429,22 @@ function renderRaw() {
     const lines = (state.raw[s.id] || '').split(/\r?\n/).filter(Boolean);
     const body = [lines[0], ...(s.pick ? [lines.find(l => s.pick.test(l))] : lines.slice(1, 3))].filter(Boolean)
       .map(l => { l = l.replace(/^﻿/, '‹BOM›'); return l.length > 118 ? l.slice(0, 118) + '…' : l; })
-      .map(l => esc(l).replace(s.hl || /$^/, m => `<mark>${m}</mark>`)).join('\n');
+      .map(l => `<span class="ln">${esc(l).replace(s.hl || /$^/, m => `<mark style="--d:${mk++}">${m}</mark>`)}</span>`).join('');
     box.insertAdjacentHTML('beforeend', `<div class="rawfile"><div class="fn"><span>${esc(s.file.split('/').pop())}</span><em>${esc(s.note || '')}</em></div><pre>${body}</pre></div>`);
   }
 }
+let mk = 0;
+/* count-up for numbers; respects reduced motion */
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+function countUp(el, to, dec = 0, suffix = '') {
+  if (RM || !Number.isFinite(to)) { el.textContent = fmt(to, dec) + suffix; return; }
+  const from = parseFloat((el.dataset.v || '0')), t0 = performance.now(), dur = 900; el.dataset.v = to;
+  const step = t => { const k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3); el.textContent = fmt(from + (to - from) * e, dec) + suffix; if (k < 1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
+}
+const stagger = tb => [...tb.children].forEach((tr, i) => tr.style.setProperty('--i', Math.min(i, 24)));
 function renderHeroStats() {
-  $('#hRec').textContent = fmt(state.records.length); $('#hIss').textContent = state.issues.length; $('#insState').textContent = 'hat tamamlandı';
+  countUp($('#hRec'), state.records.length); countUp($('#hIss'), state.issues.length); $('#insState').textContent = 'hat tamamlandı';
   const rows = state.results.reduce((a, r) => a + r.ing.rows.length, 0);
   const agg = {}; state.issues.forEach(i => agg[i.type] = (agg[i.type] || 0) + i.n);
   const kb = new Blob([JSON.stringify({ pareto: Object.entries(agg), issues: state.issues.slice(0, 25).map(({ recRef, samples, ...i }) => i) })]).size / 1024;
