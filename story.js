@@ -78,24 +78,7 @@
     history.replaceState(null, '', a.getAttribute('href'));
   });
 
-  /* wheel / trackpad / scrollbar: after scrolling stops, settle on the nearest stop in the scroll direction.
-     Desktop only; phones keep free scrolling. */
-  if (matchMedia('(min-width: 900px)').matches) {
-    let lastY = scrollY, dir = 1;
-    addEventListener('scroll', () => { if (scrollY !== lastY) dir = scrollY > lastY ? 1 : -1; lastY = scrollY; }, { passive: true });
-    ScrollTrigger.create({
-      start: 0, end: 'max',
-      snap: {
-        snapTo: value => {
-          const max = maxY(); if (max <= 0) return value;
-          const y = value * max, s = computeStops();
-          const t = dir > 0 ? (s.find(v => v >= y - 4) ?? max) : ([...s].reverse().find(v => v <= y + 4) ?? 0);
-          return t / max;
-        },
-        duration: { min: .3, max: .8 }, delay: .15, ease: 'power2.inOut', inertia: false,
-      },
-    });
-  }
+  /* Mouse / trackpad scrolling stays fully manual (no snapping). Only keys and the pager use the stops. */
 
   /* progress bar */
   gsap.to('#prog', { scaleX: 1, ease: 'none', scrollTrigger: { start: 0, end: 'max', scrub: .3 } });
