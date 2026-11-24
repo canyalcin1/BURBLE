@@ -19,20 +19,30 @@
 
   /* ---------- presenter navigation: → ← PgDn PgUp, clicker friendly ---------- */
   const navH = () => document.getElementById('nav').offsetHeight;
-  // Works from positions only, so it is correct even mid-scroll. Long chapters are paged through first.
+  // Stop points: every chapter start + key blocks inside chapters; gaps longer than a screen get evenly
+  // spaced extra stops. Keyboard paging and wheel snapping both land only on these, never half-way.
+  const STOP_SEL = '.evid-h, .compare, #bulgular .tablewrap, .apps, .bento, #tahmin';
+  const maxY = () => document.documentElement.scrollHeight - innerHeight;
+  const computeStops = () => {
+    const nh = navH(), vh = innerHeight - nh, max = maxY();
+    const at = (el, pad = 0) => Math.round(el.getBoundingClientRect().top + scrollY - nh - pad);
+    const raw = [...chapters.map(c => at(c)), ...[...document.querySelectorAll(STOP_SEL)].map(el => at(el, 20)), max]
+      .map(v => Math.max(0, Math.min(max, v))).sort((a, b) => a - b);
+    const uniq = []; raw.forEach(v => { if (!uniq.length || v - uniq[uniq.length - 1] > 240 || v === max) uniq.push(v); });
+    const stops = [];
+    uniq.forEach((v, k) => {
+      stops.push(v);
+      const nxt = uniq[k + 1]; if (nxt == null) return;
+      const n = nxt - v > vh ? Math.ceil((nxt - v) / (vh * .9)) - 1 : 0;           // extra stops needed inside a long gap
+      for (let j = 1; j <= n; j++) stops.push(Math.round(v + (nxt - v) * j / (n + 1)));
+    });
+    return stops;
+  };
   let pending = null, pendingAt = 0;
   const go = dir => {
-    const nh = navH(), vh = innerHeight - nh;
     const y = pending != null && Date.now() - pendingAt < 900 ? pending : scrollY;
-    const starts = chapters.map(c => Math.max(0, Math.round(c.getBoundingClientRect().top + scrollY - nh)));
-    let i = 0; starts.forEach((s, k) => { if (s <= y + 6) i = k; });
-    let target;
-    if (dir > 0) {
-      const nextStart = i + 1 < starts.length ? starts[i + 1] : document.documentElement.scrollHeight - innerHeight;
-      target = nextStart - y > vh + 40 ? Math.min(y + vh * .85, nextStart) : nextStart;
-    } else {
-      target = y > starts[i] + 6 ? starts[i] : starts[Math.max(0, i - 1)];
-    }
+    const s = computeStops();
+    const target = dir > 0 ? (s.find(v => v > y + 8) ?? maxY()) : ([...s].reverse().find(v => v < y - 8) ?? 0);
     pending = target; pendingAt = Date.now();
     if (!reduce && window.gsap && window.ScrollToPlugin) {
       gsap.to(window, { scrollTo: { y: target, autoKill: false }, duration: Math.min(1.1, .55 + Math.abs(target - scrollY) / 4000), ease: 'power3.inOut', overwrite: true, onComplete: () => { pending = null; } });
@@ -67,6 +77,25 @@
     gsap.to(window, { scrollTo: { y, autoKill: false }, duration: Math.min(1.4, .6 + Math.abs(y - scrollY) / 5000), ease: 'power3.inOut', overwrite: true });
     history.replaceState(null, '', a.getAttribute('href'));
   });
+
+  /* wheel / trackpad / scrollbar: after scrolling stops, settle on the nearest stop in the scroll direction.
+     Desktop only; phones keep free scrolling. */
+  if (matchMedia('(min-width: 900px)').matches) {
+    let lastY = scrollY, dir = 1;
+    addEventListener('scroll', () => { if (scrollY !== lastY) dir = scrollY > lastY ? 1 : -1; lastY = scrollY; }, { passive: true });
+    ScrollTrigger.create({
+      start: 0, end: 'max',
+      snap: {
+        snapTo: value => {
+          const max = maxY(); if (max <= 0) return value;
+          const y = value * max, s = computeStops();
+          const t = dir > 0 ? (s.find(v => v >= y - 4) ?? max) : ([...s].reverse().find(v => v <= y + 4) ?? 0);
+          return t / max;
+        },
+        duration: { min: .3, max: .8 }, delay: .15, ease: 'power2.inOut', inertia: false,
+      },
+    });
+  }
 
   /* progress bar */
   gsap.to('#prog', { scaleX: 1, ease: 'none', scrollTrigger: { start: 0, end: 'max', scrub: .3 } });
